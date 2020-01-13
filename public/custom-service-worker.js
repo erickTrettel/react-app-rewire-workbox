@@ -4,12 +4,12 @@ if (workbox) {
   // js, css and html files
   workbox.routing.registerRoute(
     /\.(?:js|css|html)$/,
-    workbox.strategies.networkFirst(),
+    new workbox.strategies.CacheFirst(),
   );
   
   workbox.routing.registerRoute(
     'http://localhost:3000',
-    workbox.strategies.networkFirst()
+    new workbox.strategies.CacheFirst()
   );
 
   const bgSyncPlugin = new workbox.backgroundSync.Plugin('todoQueue', {
@@ -19,14 +19,14 @@ if (workbox) {
   // register route for API resources using network first cache strategy
   workbox.routing.registerRoute(
     'http://localhost:8000/todos', 
-    workbox.strategies.networkFirst(),
+    new workbox.strategies.NetworkFirst(),
     'GET'
   );
 
   // queue for POST requests to API
   workbox.routing.registerRoute(
     'http://localhost:8000/todos', 
-    workbox.strategies.networkFirst({
+    new workbox.strategies.NetworkFirst({
       plugins: [bgSyncPlugin]
     }),
     'POST'
