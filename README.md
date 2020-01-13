@@ -1,68 +1,121 @@
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+# React App Rewire Workbox
 
-## Available Scripts
+Este projeto utiliza o (CRA) create-react-app juntamente com a biblioteca [Workbox](https://developers.google.com/web/tools/workbox/) do Google para criar uma aplicação offline first.
 
-In the project directory, you can run:
+## Suas principais funcionalidades são:
+1. [Background sync](https://developers.google.com/web/updates/2015/12/background-sync)
+2. [Service worker cache](https://developers.google.com/web/ilt/pwa/caching-files-with-service-worker)
 
-### `yarn start`
+### Como implementar o Workbox com CRA?
 
-Runs the app in the development mode.<br />
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+O primeiro passo é criar a aplicação com a ferramenta linha de comando do React.
 
-The page will reload if you make edits.<br />
-You will also see any lint errors in the console.
+`create-react-app  <nome_da_aplicação>`
 
-### `yarn test`
+Após criado o projeto e removidos os arquivos que julgar desnecessário, crie um arquivo `custom-service-worker.js` na pasta `public`.
 
-Launches the test runner in the interactive watch mode.<br />
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```
+// custom-service-worker.js
 
-### `yarn build`
+importScripts('https://storage.googleapis.com/workbox-cdn/releases/4.3.1/workbox-sw.js');
 
-Builds the app for production to the `build` folder.<br />
-It correctly bundles React in production mode and optimizes the build for the best performance.
+if (workbox) {  
+  // js, css and html files
+  workbox.routing.registerRoute(
+    /\.(?:js|css|html)$/,
+    new workbox.strategies.CacheFirst(),
+  );
+  
+  workbox.routing.registerRoute(
+    'http://localhost:3000',
+    new workbox.strategies.CacheFirst()
+  );
 
-The build is minified and the filenames include the hashes.<br />
-Your app is ready to be deployed!
+  const bgSyncPlugin = new workbox.backgroundSync.Plugin('todoQueue', {
+    maxRetentionTime: 24 * 60
+  });
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+  // register route for API resources using network first cache strategy
+  workbox.routing.registerRoute(
+    'http://localhost:8000/todos', 
+    new workbox.strategies.NetworkFirst(),
+    'GET'
+  );
 
-### `yarn eject`
+  // queue for POST requests to API
+  workbox.routing.registerRoute(
+    'http://localhost:8000/todos', 
+    new workbox.strategies.NetworkFirst({
+      plugins: [bgSyncPlugin]
+    }),
+    'POST'
+  );
+} else {
+  console.log(`Boo! Workbox didn't load 😬`);
+}
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+Criado o service worker com suas configurações, você deve remover a checkagem de `NODE_ENV` para `production` dentro do arquivo `src/serviceWorker.js`. Assim como deverá informar o nome do seu service worker para ser registrado.
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+```
+export function register(config) {
+  if ('serviceWorker' in navigator) {
+    const publicUrl = new URL(process.env.PUBLIC_URL, window.location.href);
+    if (publicUrl.origin !== window.location.origin) {
+      return;
+    }
 
-Instead, it will copy all the configuration files and the transitive dependencies (Webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+    window.addEventListener('load', () => {
+      const swUrl = `${process.env.PUBLIC_URL}/custom-service-worker.js`;
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+      // ... rest of the code
+```
 
-## Learn More
+Para implementar o [react-app-rewired](https://github.com/timarney/react-app-rewired) no seu projeto primeiro, instale a dependência utilizando o comando:
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+`npm install --save-dev react-app-rewired`
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+Depois de instalado, criar um arquivo chamado `config-overrides.js` na raiz de seu projeto.
 
-### Code Splitting
+```
+// config-overrides.js
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/code-splitting
+const workboxPlugin = require('workbox-webpack-plugin')
+const path = require('path')
 
-### Analyzing the Bundle Size
+module.exports = {
+  webpack: function (config, env) {
+    if (env === 'production') {
+      const workboxConfigProd = {
+        swSrc: path.join(__dirname, 'public', 'custom-service-worker.js'),
+        swDest: 'custom-service-worker.js',
+        importWorkboxFrom: 'disabled'
+      }
+      config = removeSWPrecachePlugin(config)
+      config.plugins.push(new workboxPlugin.InjectManifest(workboxConfigProd))
+    }
+    return config
+  }
+}
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size
+function removeSWPrecachePlugin (config) {
+  const swPrecachePluginIndex = config.plugins.findIndex((element) => {
+    return element.constructor.name === 'SWPrecacheWebpackPlugin'
+  })
+  if (swPrecachePluginIndex !== -1) {
+    config.plugins.splice(swPrecachePluginIndex, 1)
+  }
+  return config
+}
+```
 
-### Making a Progressive Web App
+O próximo passo é configurar nosso arquivo `package.json` para utilizar os scripts do react app rewired.
 
-This section has moved here: https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app
-
-### Advanced Configuration
-
-This section has moved here: https://facebook.github.io/create-react-app/docs/advanced-configuration
-
-### Deployment
-
-This section has moved here: https://facebook.github.io/create-react-app/docs/deployment
-
-### `yarn build` fails to minify
-
-This section has moved here: https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify
+```
+"scripts": {
+  "start": "react-app-rewired start",
+  "build": "react-app-rewired build",
+  "test": "react-app-rewired test --env=jsdom",
+  "eject": "react-scripts eject"
+}
+```
